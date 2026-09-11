@@ -4,7 +4,7 @@ spring:
   data:
     mongodb:
       uri: ${MONGODB_URI}
-      database: ${MONGODB_DATABASE:prueba_tecnica}
+      database: ${MONGODB_DATABASE:tvmaze}
       auto-index-creation: true
   messages:
     basename: i18n/messages
