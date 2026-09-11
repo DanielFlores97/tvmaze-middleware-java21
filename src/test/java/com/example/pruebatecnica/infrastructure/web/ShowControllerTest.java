@@ -1,9 +1,11 @@
 package com.example.pruebatecnica.infrastructure.web;
 
-import com.example.pruebatecnica.application.GetShowService;
+import com.example.pruebatecnica.application.GetShowDetailsService;
 import com.example.pruebatecnica.config.WebConfiguration;
 import com.example.pruebatecnica.domain.AppException;
-import com.example.pruebatecnica.domain.Show;
+import com.example.pruebatecnica.domain.Comment;
+import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,17 +21,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(WebConfiguration.class)
 class ShowControllerTest {
     @Autowired MockMvc mvc;
-    @MockitoBean GetShowService service;
+    @MockitoBean GetShowDetailsService service;
 
     @Test
     void returnsFullShowWithoutEnvelope() throws Exception {
-        when(service.findById(1)).thenReturn(new Show(1, Map.of("id", 1, "name", "Show",
-                "futureField", Map.of("nested", true), "_links", Map.of("self", Map.of("href", "https://example.test")))));
+        when(service.findById(1)).thenReturn(Map.of("id", 1, "name", "Show",
+                "futureField", Map.of("nested", true), "_links", Map.of("self", Map.of("href", "https://example.test")),
+                "comments", List.of(new Comment("Good", new BigDecimal("4.5")))));
         mvc.perform(get("/api/v1/show").param("show_id", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.futureField.nested").value(true))
                 .andExpect(jsonPath("$._links.self.href").value("https://example.test"))
+                .andExpect(jsonPath("$.comments[0].comment").value("Good"))
+                .andExpect(jsonPath("$.comments[0].rating").value(4.5))
+                .andExpect(jsonPath("$.comments[0].showId").doesNotExist())
                 .andExpect(jsonPath("$.attributes").doesNotExist());
     }
 
