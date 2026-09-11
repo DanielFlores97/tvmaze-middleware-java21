@@ -1,6 +1,9 @@
 spring:
   application:
     name: prueba-tecnica
+  jackson:
+    deserialization:
+      accept-float-as-int: false
   data:
     mongodb:
       uri: ${MONGODB_URI}

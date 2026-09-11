@@ -2,6 +2,8 @@ package com.example.pruebatecnica.config;
 
 import com.example.pruebatecnica.application.SearchShowsService;
 import com.example.pruebatecnica.application.GetShowService;
+import com.example.pruebatecnica.application.AddCommentService;
+import com.example.pruebatecnica.application.port.CommentWriter;
 import com.example.pruebatecnica.application.port.ShowProvider;
 import com.example.pruebatecnica.application.port.ShowCache;
 import com.example.pruebatecnica.application.port.ShowSearchProvider;
@@ -16,6 +18,11 @@ import org.springframework.web.client.RestClient;
 
 @Configuration
 public class ApplicationConfig {
+    @Bean
+    AddCommentService addCommentService(GetShowService shows, CommentWriter comments) {
+        return new AddCommentService(shows, comments);
+    }
+
     @Bean
     GetShowService getShowService(ShowProvider provider, ShowCache cache) {
         return new GetShowService(provider, cache);
