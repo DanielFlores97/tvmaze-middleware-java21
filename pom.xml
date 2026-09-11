@@ -12,7 +12,7 @@
     <artifactId>prueba-tecnica</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>prueba-tecnica-java21</name>
-    <description>API Java 21 con cache en MongoDB Atlas</description>
+    <description>TVMaze middleware: search, shows and comments with MongoDB Atlas</description>
     <properties>
         <java.version>21</java.version>
     </properties>
@@ -52,4 +52,25 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>atlas-integration</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

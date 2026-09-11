@@ -1,20 +1,50 @@
 @baseUrl = http://localhost:8080
+@showId = 1
 
-### Primera consulta: API externa y escritura en Atlas. Repetir para leer la cache.
-GET {{baseUrl}}/api/v1/posts/1
+### A - Buscar shows con comentarios
+GET {{baseUrl}}/api/v1/search?search_query=girls
 Accept: application/json
 Accept-Language: es
-X-Request-ID: prueba-001
+X-Request-ID: search-001
 
-### Invalidar la entrada en Atlas
-DELETE {{baseUrl}}/api/v1/posts/1/cache
+### B - Detalle completo; repetir para verificar cache hit
+GET {{baseUrl}}/api/v1/show?show_id={{showId}}
+Accept: application/json
+X-Request-ID: show-001
 
-### Error traducido al ingles
-GET {{baseUrl}}/api/v1/posts/999999
+### C - Guardar comentario; requiere show existente
+POST {{baseUrl}}/api/v1/comments
+Content-Type: application/json
+Accept-Language: es
+
+{
+  "show_id": {{showId}},
+  "comment": "Muy buena serie",
+  "rating": 4.5
+}
+
+### B - Debe incluir el nuevo comentario aun con cache hit
+GET {{baseUrl}}/api/v1/show?show_id={{showId}}
+
+### A - Buscar el show comentado para ver sus comentarios
+GET {{baseUrl}}/api/v1/search?search_query=under%20the%20dome
+
+### Rating invalido: 400
+POST {{baseUrl}}/api/v1/comments
+Content-Type: application/json
 Accept-Language: en
 
-### Validacion
-GET {{baseUrl}}/api/v1/posts/0
+{"show_id": 1, "comment": "Example", "rating": 6}
 
-### Estado de la aplicacion y conexion MongoDB
+### Parametro invalido en ingles: 400
+GET {{baseUrl}}/api/v1/show?show_id=0
+Accept-Language: en
+
+### Sin coincidencias: arreglo vacio
+GET {{baseUrl}}/api/v1/search?search_query=xyz-nonexistent-show-987654321
+
+### Estado de Atlas
 GET {{baseUrl}}/actuator/health
+
+### Contrato OpenAPI
+GET {{baseUrl}}/openapi.yaml

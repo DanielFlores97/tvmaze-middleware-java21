@@ -1,140 +1,189 @@
-# Prueba tecnica: Java 21 + MongoDB Atlas
+# TVMaze Middleware - Examen Backend Java 21
 
-Base funcional con Spring Boot 3.5.16, Maven, consumo HTTP con RestClient,
-API REST, cache-aside en Atlas, SLF4J/Logback, i18n y errores Problem Detail.
-El recurso de ejemplo es una publicacion de JSONPlaceholder; se puede sustituir el proveedor
-sin modificar el caso de uso. No requiere Docker ni una instalacion local de MongoDB.
+API REST con Spring Boot 3.5.16, Maven y MongoDB Atlas. Implementa la busqueda de shows,
+consulta del objeto completo con cache persistente y comentarios/calificaciones.
+No requiere una instalacion local de MongoDB ni contenedores.
 
-## Arranque con Atlas
+## Ejecutar
 
-Requisitos: JDK 21 y un cluster MongoDB Atlas. Maven Wrapper viene incluido.
-
-1. En Atlas, crea un usuario de **base de datos** con permiso readWrite sobre
-   `prueba_tecnica`. La aplicacion necesita crear la coleccion y su indice TTL.
-2. En Network Access, autoriza la IP desde la que ejecutaras la aplicacion.
-3. En Connect > Drivers, copia la URI. Sustituye usuario, password y host.
-   Codifica los caracteres especiales de las credenciales mediante percent-encoding.
-4. Configura las variables en la misma terminal y arranca:
+Requisitos: JDK 21 y un cluster MongoDB Atlas Free/M0. Maven Wrapper esta incluido.
+La configuracion de Atlas (incluido acceso 0.0.0.0/0 solicitado por el examen)
+esta en [docs/ATLAS.md](docs/ATLAS.md).
 
 ```powershell
 cd "$env:USERPROFILE\Documents\prueba-tecnica-java21"
-$env:MONGODB_URI = 'mongodb+srv://USUARIO:PASSWORD_URL_ENCODED@CLUSTER.mongodb.net/?retryWrites=true&w=majority&appName=prueba-tecnica'
-$env:MONGODB_DATABASE = 'prueba_tecnica'
+$env:MONGODB_URI = 'mongodb+srv://USUARIO:PASSWORD_URL_ENCODED@CLUSTER.mongodb.net/?retryWrites=true&w=majority&appName=tvmaze'
+$env:MONGODB_DATABASE = 'tvmaze'
 .\mvnw.cmd spring-boot:run
 ```
 
-En Linux/macOS: exporta las mismas variables y ejecuta `sh mvnw spring-boot:run`.
-El archivo `.env.example` es una referencia: Spring Boot no carga archivos .env automaticamente.
-No guardes la URI real en el repositorio ni la compartas en logs o peticiones HTTP.
+En Linux/macOS, exporta las mismas variables y usa `./mvnw spring-boot:run`.
+Spring Boot no carga automaticamente `.env`; `.env.example` es solo una referencia.
+Las credenciales se configuran en el entorno del proceso o del IDE, nunca en Git.
 
-La URI es obligatoria, sin fallback local. El arranque exige conexion a Atlas para crear
-el indice: una URI incorrecta, IP no autorizada o falta de permisos impide iniciar.
-No se ha configurado un cluster ni se incluyen credenciales.
+Atlas debe estar accesible al iniciar para crear la coleccion de comentarios y su indice.
+No hay fallback a localhost ni una URI con credenciales incluidas.
+`GET /actuator/health` comprueba tambien MongoDB sin exponer detalles internos.
 
-## API
+## Contrato
 
-| Metodo | Ruta | Resultado |
-| --- | --- | --- |
-| GET | /api/v1/posts/{id} | Publicacion; consulta Atlas y, ante un miss, al proveedor |
-| DELETE | /api/v1/posts/{id}/cache | 204; invalida la entrada, sin borrar el recurso externo |
-| GET | /actuator/health | Salud, incluida la conexion a MongoDB |
+| Metodo | Endpoint | Entrada | Respuesta |
+| --- | --- | --- | --- |
+| GET | /api/v1/search | query param search_query | 200, arreglo de shows resumidos con comments |
+| GET | /api/v1/show | query param show_id | 200, objeto completo de TVMaze con comments |
+| POST | /api/v1/comments | JSON show_id, comment, rating | 201, {"status":"created"} |
 
-Los IDs deben ser positivos. `requests.http` incluye peticiones para un cliente REST del IDE.
+El contrato OpenAPI esta en [openapi.yaml](src/main/resources/static/openapi.yaml),
+disponible tambien en `http://localhost:8080/openapi.yaml` al arrancar.
+[requests.http](requests.http) contiene peticiones ejecutables desde un cliente REST del IDE.
 
 ```powershell
-Invoke-RestMethod http://localhost:8080/api/v1/posts/1
-Invoke-RestMethod -Method Delete http://localhost:8080/api/v1/posts/1/cache
-Invoke-RestMethod http://localhost:8080/actuator/health
+Invoke-RestMethod 'http://localhost:8080/api/v1/search?search_query=girls'
+Invoke-RestMethod 'http://localhost:8080/api/v1/show?show_id=1'
+Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/api/v1/comments' -ContentType 'application/json' -Body '{"show_id":1,"comment":"Muy buena serie","rating":4.5}'
 ```
 
-## Cache
+Busqueda:
 
-Coleccion `post_cache`, clave unica `_id` por publicacion, valor `post` y fecha `expiresAt`.
-Spring Data crea `post_cache_expiry` con `expireAfterSeconds: 0`.
-El TTL por defecto es cinco minutos desde la escritura; leer no renueva la expiracion.
-Cada lectura verifica la fecha porque la eliminacion fisica de TTL es asincrona.
+```json
+[
+  {
+    "id": 1,
+    "name": "Ejemplo",
+    "channel": "HBO",
+    "summary": "<p>Resumen original</p>",
+    "genres": ["Drama"],
+    "comments": [{"comment": "Muy buena serie", "rating": 4.5}]
+  }
+]
+```
 
-Si falla una lectura/escritura de cache durante la ejecucion, se permite obtener la respuesta
-del proveedor. Una invalidacion fallida devuelve 503. No se cachean errores ni resultados
-vencidos. Si Atlas falla, health puede devolver DOWN aunque algunas consultas sigan funcionando.
-Varias solicitudes simultaneas para una clave ausente pueden consultar al proveedor en paralelo.
-No se implementan bloqueos distribuidos ni stale-while-revalidate.
+`channel` prioriza `network.name`; si no existe, utiliza `webChannel.name`.
+Puede ser null si no hay ninguno. `summary` preserva el HTML y los null de TVMaze.
+El orden de relevancia se conserva. Una busqueda sin coincidencias retorna `[]`.
+El detalle preserva todos los atributos originales, incluidos campos adicionales y `_links`,
+sin envolverlos en un DTO que pueda perder informacion.
 
-## Configuracion
+## Flujo y persistencia
 
-| Variable | Valor por defecto |
+```mermaid
+flowchart LR
+  Client --> Search["GET search"]
+  Search --> TVMaze
+  Search --> Comments["show_comments: consulta por lote"]
+  Client --> Show["GET show"]
+  Show --> Cache["show_cache: buscar ID"]
+  Cache -->|miss| TVMaze
+  TVMaze -->|guardar antes de responder| Cache
+  Show --> Comments
+  Client --> Post["POST comments"]
+  Post --> Exists["validar show mediante cache/proveedor"]
+  Exists --> Comments
+```
+
+- `show_cache`: `_id` es el ID del show, `payload` es el JSON completo y `cachedAt` la fecha UTC.
+- `show_comments`: documento independiente por comentario, con showId, comment, rating y createdAt.
+- Indice `comments_by_show` en showId, createdAt e _id; comentarios ordenados por fecha e ID.
+- La busqueda obtiene todos los comentarios con una consulta `$in`, evitando N+1.
+- Los comentarios se leen en cada respuesta y nunca forman parte del payload cacheado.
+- No hay TTL: cualquier ID ya registrado satisface la cache conforme al enunciado.
+- Un error MongoDB devuelve 503; una escritura fallida no se reporta como exitosa.
+
+La cache es persistente y puede quedar desactualizada respecto a TVMaze.
+La renovacion y los bloqueos distribuidos quedan fuera del examen; solicitudes concurrentes
+para un ID ausente pueden consumir TVMaze mas de una vez, pero comparten una clave unica.
+Cada POST crea un comentario independiente; no se deduplican reintentos de clientes.
+No se implementa paginacion de comentarios porque el contrato solicita el arreglo completo.
+
+## Validacion y errores
+
+`search_query`: no vacio, maximo 200 caracteres. Se recortan espacios exteriores.
+`show_id`: entero positivo de 64 bits; se rechazan fracciones.
+`comment`: no vacio, maximo 2000 caracteres, con espacios exteriores recortados.
+`rating`: numero entre 0 y 5 inclusive; se admiten decimales.
+Antes de insertar un comentario se valida que el show exista usando cache/proveedor.
+No existen endpoints para editar o borrar comentarios porque no fueron solicitados.
+
+Errores centralizados `application/problem+json` con code, timestamp y requestId:
+
+| HTTP | Caso |
 | --- | --- |
-| MONGODB_URI | Obligatoria, URI de Atlas |
-| MONGODB_DATABASE | prueba_tecnica |
-| CACHE_TTL | PT5M, minimo PT1S |
-| EXTERNAL_API_BASE_URL | https://jsonplaceholder.typicode.com |
+| 400 | Parametros, JSON o validacion invalidos |
+| 404 | Show inexistente |
+| 502 | Respuesta invalida o fallo de TVMaze |
+| 503 | Fallo MongoDB o limite de peticiones de TVMaze |
+| 504 | Timeout de TVMaze |
+| 500 | Error inesperado sin detalles internos en la respuesta |
+
+Si TVMaze responde 429, el middleware devuelve 503 con `Retry-After: 10`.
+El cliente puede reintentar pasado ese intervalo; no hay reintentos automaticos que multipliquen
+las llamadas al proveedor.
+
+## SOLID, i18n y logging
+
+Dominio y casos de uso no dependen de Spring ni MongoDB.
+Los puertos ShowSearchProvider, ShowProvider, ShowCache, CommentReader y CommentWriter
+separan los contratos de busqueda, detalle, cache, lectura y escritura.
+Los adaptadores HTTP/MongoDB implementan esos contratos y ApplicationConfig ensambla las dependencias.
+Los controladores solo traducen el contrato HTTP; los servicios coordinan las operaciones.
+
+`Accept-Language: es` (predeterminado) o `en` selecciona los mensajes.
+Los logs operativos usan SLF4J/Logback y eventos estables en ingles.
+`X-Request-ID` correlaciona respuesta, errores y logs; si no es valido, se genera un UUID.
+Los logs de solicitudes incluyen metodo, estado y duracion, sin registrar cuerpos o credenciales.
+Con APP_LOG_LEVEL=DEBUG se observan los cache hit/miss.
+
+## Variables
+
+| Variable | Predeterminado |
+| --- | --- |
+| MONGODB_URI | Obligatoria, cadena de Atlas |
+| MONGODB_DATABASE | tvmaze |
+| EXTERNAL_API_BASE_URL | https://api.tvmaze.com |
 | EXTERNAL_API_CONNECT_TIMEOUT | PT3S |
 | EXTERNAL_API_READ_TIMEOUT | PT5S |
 | SERVER_PORT | 8080 |
 | APP_LOG_LEVEL | INFO |
 
-El cliente MongoDB usa tres segundos para seleccion de servidor, conexion y lectura.
-El timeout del proveedor se traduce a 504; sus fallos y respuestas invalidas a 502.
-Estos limites de operaciones no representan un deadline global de la peticion.
+MongoDB usa tres segundos para seleccion de servidor, conexion y lectura.
+Los timeouts son por operacion y no representan un deadline global.
 
-## SOLID y estructura
-
-```text
-com.example.pruebatecnica
-  domain                 Post y errores de aplicacion, sin dependencias Spring
-  application            Caso de uso PostService
-    port                 Contratos PostProvider y PostCache
-  infrastructure
-    http                 Adaptador de JSONPlaceholder
-    cache                Adaptador MongoDB y documento TTL
-    web                  Controlador, errores y filtro de logging
-  config                 Inyeccion de dependencias, HTTP, idiomas y propiedades
-```
-
-Responsabilidad unica: cada adaptador gestiona su tecnologia. Inversion de dependencias:
-el servicio depende de interfaces y se ensambla en configuracion.
-Los contratos son pequenos; otro proveedor o cache puede implementarlos sin cambiar
-el servicio. Los tests del caso de uso usan sustitutos de esos contratos.
-
-## Mensajes, logging y excepciones
-
-`Accept-Language: es` (por defecto) o `en` selecciona los mensajes en
-`src/main/resources/i18n/messages*.properties`. Los datos del proveedor no se traducen.
-Los logs operativos usan eventos estables en ingles, SLF4J y Logback en consola.
-Para ver hit/miss, configura `APP_LOG_LEVEL=DEBUG`.
-
-Cada peticion recibe `X-Request-ID`; el mismo valor aparece en MDC y en errores.
-Se acepta un ID entrante de 1 a 64 caracteres alfanumericos, punto, guion o guion bajo.
-Se registra metodo, estado y duracion, sin cuerpos, credenciales o query strings.
-
-Los errores usan `application/problem+json`, con `status`, `title`, `detail`,
-`type`, `code`, `timestamp` y `requestId`.
-Codigos relevantes: 400 validacion, 404 recurso inexistente, 502 proveedor,
-503 invalidacion de cache, 504 timeout y 500 error inesperado.
-Los errores inesperados conservan stack trace en logs del servidor.
-
-## Verificacion
+## Pruebas
 
 ```powershell
-.\mvnw.cmd clean verify
+.\mvnw.cmd -B -ntp clean verify
 ```
 
-Las pruebas usan JUnit 5, Mockito, MockMvc y MockRestServiceServer. Cubren hit/miss,
-expiracion, fallos de cache, invalidacion, errores del proveedor, validacion,
-traducciones y correlacion. No requieren red, Atlas ni credenciales una vez descargadas
-las dependencias. No sustituyen una prueba real contra Atlas.
+JUnit 5, Mockito, MockMvc y MockRestServiceServer verifican los casos de uso,
+contratos HTTP, conversion de TVMaze, cache, comentarios y errores.
+Las pruebas habituales no requieren Atlas ni credenciales. GitHub Actions ejecuta esta misma
+verificacion con Java 21. Las dependencias necesitan red en su primera descarga.
 
-Para verificar Atlas: arranca con tu URI, consulta /posts/1 dos veces con logging DEBUG,
-comprueba miss/hit, inspecciona `post_cache` y el indice en Atlas e invalida la entrada.
-Con `CACHE_TTL=PT5S`, consulta de nuevo tras cinco segundos: debe volver al proveedor
-aunque MongoDB aun conserve el documento vencido.
+La prueba de integracion utiliza Atlas real y simula solo TVMaze:
 
-La API de ejemplo no incluye autenticacion; el endpoint de invalidacion debe protegerse
-si se publica fuera del entorno de la prueba.
+```powershell
+$env:ATLAS_TEST_URI = 'mongodb+srv://USUARIO:PASS@CLUSTER.mongodb.net/?retryWrites=true&w=majority'
+$env:ATLAS_TEST_DATABASE = 'tvmaze_test'
+.\mvnw.cmd -B -ntp verify -Patlas-integration
+```
 
-## Referencias
+Usa un usuario con readWrite sobre `tvmaze_test`. El nombre debe comenzar con `tvmaze_test`.
+La prueba crea registros con un ID aleatorio y elimina solo esos registros al finalizar.
+Comprueba cache hit/miss, insercion y consulta de comentarios, JSON completo e indice real.
+Este perfil falla si falta ATLAS_TEST_URI; no se omite silenciosamente.
+No se ha ejecutado contra Atlas mientras no exista una conexion configurada.
 
-- [Requisitos de Spring Boot 3.5](https://docs.spring.io/spring-boot/3.5/system-requirements.html)
-- [Conexion a Atlas](https://www.mongodb.com/docs/atlas/connect-to-database-deployment/)
-- [Indices TTL](https://www.mongodb.com/docs/manual/core/index-ttl/)
-- [API de ejemplo](https://jsonplaceholder.typicode.com/guide/)
+## Entrega
+
+[docs/PROGRESS.md](docs/PROGRESS.md) relaciona los avances con commits separados.
+El repositorio debe ser privado y Pinwox debe aceptar la invitacion para acceder.
+La provision de Atlas requiere una cuenta autenticada y no queda resuelta por compilar el codigo.
+
+Esta API de examen no incluye autenticacion. Antes de exponerla publicamente deben protegerse
+las escrituras y limitarse las peticiones.
+
+## Fuente de datos
+
+Datos de [TVMaze](https://www.tvmaze.com), mediante su [API oficial](https://www.tvmaze.com/api).
+TVMaze publica los datos bajo CC BY-SA; se conserva el contenido original y se agrega
+la informacion local de comentarios. El contrato y sus ejemplos usan HTTPS.

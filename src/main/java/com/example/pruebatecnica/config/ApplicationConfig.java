@@ -53,7 +53,7 @@ public class ApplicationConfig {
         var factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(properties.readTimeout());
         return builder.baseUrl(properties.baseUrl().toString())
-                .defaultHeader("User-Agent", "Pinwox-TVmaze-Technical-Test/1.0")
+                .defaultHeader("User-Agent", "TvMaze-Middleware-Java21/1.0")
                 .requestFactory(factory).build();
     }
 

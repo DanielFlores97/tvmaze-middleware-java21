@@ -1,0 +1,234 @@
+openapi: 3.0.3
+info:
+  title: TVMaze Middleware
+  version: 1.0.0
+  description: |
+    Examen Java 21. Datos de shows provistos por TVMaze (https://www.tvmaze.com).
+    Cache persistente y comentarios en MongoDB Atlas.
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/v1/search:
+    get:
+      operationId: searchShows
+      summary: Buscar shows y agregar sus comentarios
+      parameters:
+        - name: search_query
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          description: Texto no vacio; se eliminan espacios al inicio y al final.
+        - $ref: '#/components/parameters/Language'
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Resultados en orden de relevancia; arreglo vacio si no hay coincidencias.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SearchResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '504':
+          $ref: '#/components/responses/Problem'
+  /api/v1/show:
+    get:
+      operationId: getShow
+      summary: Obtener el objeto completo del show y sus comentarios actuales
+      parameters:
+        - name: show_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - $ref: '#/components/parameters/Language'
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Objeto completo de TVMaze con comments, sin envoltorio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Show'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '504':
+          $ref: '#/components/responses/Problem'
+  /api/v1/comments:
+    post:
+      operationId: createComment
+      summary: Guardar comentario y calificacion de un show existente
+      parameters:
+        - $ref: '#/components/parameters/Language'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [show_id, comment, rating]
+              properties:
+                show_id:
+                  type: integer
+                  format: int64
+                  minimum: 1
+                comment:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                  description: No puede contener solamente espacios.
+                rating:
+                  type: number
+                  minimum: 0
+                  maximum: 5
+            example:
+              show_id: 1
+              comment: Muy buena serie
+              rating: 4.5
+      responses:
+        '201':
+          description: Comentario persistido correctamente.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [created]
+        '400':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '504':
+          $ref: '#/components/responses/Problem'
+components:
+  parameters:
+    Language:
+      name: Accept-Language
+      in: header
+      schema:
+        type: string
+        default: es
+      description: Mensajes en es o en; se admiten variantes regionales.
+    RequestId:
+      name: X-Request-ID
+      in: header
+      schema:
+        type: string
+        maxLength: 64
+        pattern: '^[a-zA-Z0-9._-]{1,64}$'
+      description: Se devuelve en la respuesta; si falta o es invalido se genera un UUID.
+  schemas:
+    Comment:
+      type: object
+      required: [comment, rating]
+      properties:
+        comment:
+          type: string
+        rating:
+          type: number
+          minimum: 0
+          maximum: 5
+    SearchResult:
+      type: object
+      required: [id, name, channel, summary, genres, comments]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        channel:
+          type: string
+          nullable: true
+          description: network.name, o webChannel.name si network no tiene nombre.
+        summary:
+          type: string
+          nullable: true
+          description: HTML original de TVMaze.
+        genres:
+          type: array
+          items:
+            type: string
+        comments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Comment'
+    Show:
+      type: object
+      required: [id, name, comments]
+      additionalProperties: true
+      description: Todos los campos originales de TVMaze se preservan.
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        comments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Comment'
+    Problem:
+      type: object
+      required: [type, title, status, detail, code, timestamp, requestId]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        code:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        requestId:
+          type: string
+  responses:
+    Problem:
+      description: Error centralizado; detalle localizado mediante Accept-Language.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unavailable:
+      description: MongoDB no disponible o limite de TVMaze alcanzado.
+      headers:
+        Retry-After:
+          description: Presente cuando TVMaze limita peticiones; esperar antes de reintentar.
+          schema:
+            type: integer
+            example: 10
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
