@@ -1,7 +1,7 @@
 package com.example.pruebatecnica.infrastructure.web;
 
 import com.example.pruebatecnica.application.SearchShowsService;
-import com.example.pruebatecnica.domain.ShowSummary;
+import com.example.pruebatecnica.domain.ShowSearchResult;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.util.List;
@@ -18,7 +18,7 @@ public class SearchController {
     }
 
     @GetMapping("/api/v1/search")
-    public List<ShowSummary> search(@RequestParam("search_query") @NotBlank @Size(max = 200) String query) {
+    public List<ShowSearchResult> search(@RequestParam("search_query") @NotBlank @Size(max = 200) String query) {
         return service.search(query);
     }
 }

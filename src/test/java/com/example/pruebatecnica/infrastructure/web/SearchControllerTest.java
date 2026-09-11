@@ -3,7 +3,7 @@ package com.example.pruebatecnica.infrastructure.web;
 import com.example.pruebatecnica.application.SearchShowsService;
 import com.example.pruebatecnica.config.WebConfiguration;
 import com.example.pruebatecnica.domain.AppException;
-import com.example.pruebatecnica.domain.ShowSummary;
+import com.example.pruebatecnica.domain.ShowSearchResult;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,13 +24,15 @@ class SearchControllerTest {
     @Test
     void returnsArrayWithRequiredFields() throws Exception {
         when(service.search("girls")).thenReturn(List.of(
-                new ShowSummary(1, "Girls", "HBO", null, List.of("Drama"))));
+                new ShowSearchResult(1, "Girls", "HBO", null, List.of("Drama"), List.of())));
         mvc.perform(get("/api/v1/search").param("search_query", "girls").header("X-Request-ID", "search-1"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Request-ID", "search-1"))
                 .andExpect(jsonPath("$[0].name").value("Girls"))
                 .andExpect(jsonPath("$[0].channel").value("HBO"))
                 .andExpect(jsonPath("$[0].genres[0]").value("Drama"))
+                .andExpect(jsonPath("$[0].comments").isArray())
+                .andExpect(jsonPath("$[0].comments").isEmpty())
                 .andExpect(jsonPath("$[0].score").doesNotExist());
     }
 

@@ -4,6 +4,7 @@ import com.example.pruebatecnica.application.SearchShowsService;
 import com.example.pruebatecnica.application.GetShowService;
 import com.example.pruebatecnica.application.AddCommentService;
 import com.example.pruebatecnica.application.port.CommentWriter;
+import com.example.pruebatecnica.application.port.CommentReader;
 import com.example.pruebatecnica.application.port.ShowProvider;
 import com.example.pruebatecnica.application.port.ShowCache;
 import com.example.pruebatecnica.application.port.ShowSearchProvider;
@@ -29,8 +30,8 @@ public class ApplicationConfig {
     }
 
     @Bean
-    SearchShowsService searchShowsService(ShowSearchProvider provider) {
-        return new SearchShowsService(provider);
+    SearchShowsService searchShowsService(ShowSearchProvider provider, CommentReader comments) {
+        return new SearchShowsService(provider, comments);
     }
 
     @Bean
