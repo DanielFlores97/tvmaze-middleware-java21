@@ -1,6 +1,10 @@
 package com.example.pruebatecnica.infrastructure.http;
 
 import com.example.pruebatecnica.application.port.ShowSearchProvider;
+import com.example.pruebatecnica.application.port.ShowProvider;
+import com.example.pruebatecnica.domain.Show;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.pruebatecnica.domain.AppException;
 import com.example.pruebatecnica.domain.ShowSummary;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -8,17 +12,30 @@ import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 @Component
-public class TvMazeClient implements ShowSearchProvider {
+public class TvMazeClient implements ShowSearchProvider, ShowProvider {
     private final RestClient client;
+    private final ObjectMapper mapper;
 
-    public TvMazeClient(RestClient externalRestClient) {
+    public TvMazeClient(RestClient externalRestClient, ObjectMapper mapper) {
         this.client = externalRestClient;
+        this.mapper = mapper;
+    }
+
+    @Override
+    public Show findById(long id) {
+        JsonNode response = get("/shows/{id}", id);
+        if (validId(response) != id || !response.path("name").isTextual()) {
+            throw invalidResponse();
+        }
+        Map<String, Object> attributes = mapper.convertValue(response, new TypeReference<>() {});
+        return new Show(id, attributes);
     }
 
     @Override

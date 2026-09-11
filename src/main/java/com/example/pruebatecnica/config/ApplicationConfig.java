@@ -1,6 +1,8 @@
 package com.example.pruebatecnica.config;
 
 import com.example.pruebatecnica.application.SearchShowsService;
+import com.example.pruebatecnica.application.GetShowService;
+import com.example.pruebatecnica.application.port.ShowProvider;
 import com.example.pruebatecnica.application.port.ShowSearchProvider;
 import java.net.http.HttpClient;
 import java.time.Clock;
@@ -13,6 +15,11 @@ import org.springframework.web.client.RestClient;
 
 @Configuration
 public class ApplicationConfig {
+    @Bean
+    GetShowService getShowService(ShowProvider provider) {
+        return new GetShowService(provider);
+    }
+
     @Bean
     SearchShowsService searchShowsService(ShowSearchProvider provider) {
         return new SearchShowsService(provider);
