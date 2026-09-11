@@ -21,10 +21,8 @@ server:
     include-stacktrace: never
 
 app:
-  cache:
-    ttl: ${CACHE_TTL:PT5M}
   external-api:
-    base-url: ${EXTERNAL_API_BASE_URL:https://jsonplaceholder.typicode.com}
+    base-url: ${EXTERNAL_API_BASE_URL:https://api.tvmaze.com}
     connect-timeout: ${EXTERNAL_API_CONNECT_TIMEOUT:PT3S}
     read-timeout: ${EXTERNAL_API_READ_TIMEOUT:PT5S}
 

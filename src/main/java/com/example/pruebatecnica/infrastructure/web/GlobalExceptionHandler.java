@@ -30,21 +30,26 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(AppException.class)
     ResponseEntity<Object> handleApplication(AppException exception) {
         HttpStatus status = switch (exception.code()) {
-            case POST_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case SHOW_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case UPSTREAM_UNAVAILABLE -> HttpStatus.BAD_GATEWAY;
             case UPSTREAM_TIMEOUT -> HttpStatus.GATEWAY_TIMEOUT;
-            case CACHE_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
+            case DATABASE_UNAVAILABLE, UPSTREAM_RATE_LIMITED -> HttpStatus.SERVICE_UNAVAILABLE;
             case INVALID_REQUEST -> HttpStatus.BAD_REQUEST;
         };
         String key = switch (exception.code()) {
-            case POST_NOT_FOUND -> "error.post.notFound";
+            case SHOW_NOT_FOUND -> "error.show.notFound";
             case UPSTREAM_UNAVAILABLE -> "error.upstream";
             case UPSTREAM_TIMEOUT -> "error.upstream.timeout";
-            case CACHE_UNAVAILABLE -> "error.cache";
+            case DATABASE_UNAVAILABLE -> "error.database";
+            case UPSTREAM_RATE_LIMITED -> "error.upstream.rateLimit";
             case INVALID_REQUEST -> "error.invalid";
         };
         log.warn("event=request.failed code={} status={}", exception.code(), status.value());
-        return ResponseEntity.status(status).body(problem(status, key, exception.code().name()));
+        var response = ResponseEntity.status(status);
+        if (exception.code() == AppException.Code.UPSTREAM_RATE_LIMITED) {
+            response.header(HttpHeaders.RETRY_AFTER, "10");
+        }
+        return response.body(problem(status, key, exception.code().name()));
     }
 
     @ExceptionHandler(Exception.class)

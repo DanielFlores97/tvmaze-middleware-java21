@@ -1,8 +1,7 @@
 package com.example.pruebatecnica.config;
 
-import com.example.pruebatecnica.application.PostService;
-import com.example.pruebatecnica.application.port.PostCache;
-import com.example.pruebatecnica.application.port.PostProvider;
+import com.example.pruebatecnica.application.SearchShowsService;
+import com.example.pruebatecnica.application.port.ShowSearchProvider;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.util.concurrent.TimeUnit;
@@ -15,8 +14,8 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class ApplicationConfig {
     @Bean
-    PostService postService(PostProvider provider, PostCache cache) {
-        return new PostService(provider, cache);
+    SearchShowsService searchShowsService(ShowSearchProvider provider) {
+        return new SearchShowsService(provider);
     }
 
     @Bean
@@ -31,7 +30,9 @@ public class ApplicationConfig {
                 .build();
         var factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(properties.readTimeout());
-        return builder.baseUrl(properties.baseUrl().toString()).requestFactory(factory).build();
+        return builder.baseUrl(properties.baseUrl().toString())
+                .defaultHeader("User-Agent", "Pinwox-TVmaze-Technical-Test/1.0")
+                .requestFactory(factory).build();
     }
 
     @Bean

@@ -2,7 +2,8 @@ package com.example.pruebatecnica.domain;
 
 public class AppException extends RuntimeException {
     public enum Code {
-        POST_NOT_FOUND, UPSTREAM_UNAVAILABLE, UPSTREAM_TIMEOUT, CACHE_UNAVAILABLE, INVALID_REQUEST
+        SHOW_NOT_FOUND, UPSTREAM_UNAVAILABLE, UPSTREAM_TIMEOUT, UPSTREAM_RATE_LIMITED,
+        DATABASE_UNAVAILABLE, INVALID_REQUEST
     }
 
     private final Code code;
