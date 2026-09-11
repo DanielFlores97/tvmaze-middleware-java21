@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: prueba-tecnica
+  data:
+    mongodb:
+      uri: ${MONGODB_URI}
+      database: ${MONGODB_DATABASE:prueba_tecnica}
+      auto-index-creation: true
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+  mvc:
+    log-resolved-exception: false
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+
+app:
+  cache:
+    ttl: ${CACHE_TTL:PT5M}
+  external-api:
+    base-url: ${EXTERNAL_API_BASE_URL:https://jsonplaceholder.typicode.com}
+    connect-timeout: ${EXTERNAL_API_CONNECT_TIMEOUT:PT3S}
+    read-timeout: ${EXTERNAL_API_READ_TIMEOUT:PT5S}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: INFO
+    com.example.pruebatecnica: ${APP_LOG_LEVEL:INFO}
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] [requestId=%X{requestId:-}] %logger{36} - %msg%n"

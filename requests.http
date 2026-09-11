@@ -1,0 +1,20 @@
+@baseUrl = http://localhost:8080
+
+### Primera consulta: API externa y escritura en Atlas. Repetir para leer la cache.
+GET {{baseUrl}}/api/v1/posts/1
+Accept: application/json
+Accept-Language: es
+X-Request-ID: prueba-001
+
+### Invalidar la entrada en Atlas
+DELETE {{baseUrl}}/api/v1/posts/1/cache
+
+### Error traducido al ingles
+GET {{baseUrl}}/api/v1/posts/999999
+Accept-Language: en
+
+### Validacion
+GET {{baseUrl}}/api/v1/posts/0
+
+### Estado de la aplicacion y conexion MongoDB
+GET {{baseUrl}}/actuator/health
